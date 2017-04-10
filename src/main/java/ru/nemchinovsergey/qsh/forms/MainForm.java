@@ -5,6 +5,14 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.*;
+import java.util.List;
 
 /**
  * Created by Sergey on 08.04.2017.
@@ -28,11 +36,10 @@ public class MainForm extends JFrame {
         setVisible(true);
 
         startButton.addActionListener(new StartAction());
-
         browseButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 JFileChooser fileChooser = new JFileChooser();
-                fileChooser.setCurrentDirectory(new File(""));
+                fileChooser.setCurrentDirectory(new File(textField1.getText()));
                 fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 
                 if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
@@ -46,23 +53,81 @@ public class MainForm extends JFrame {
         public void actionPerformed(ActionEvent e) {
             String path = textField1.getText();
 
+            if (path == null || path.isEmpty()) {
+                JOptionPane.showMessageDialog(MainForm.this, "Укажите директорию!");
+                return;
+            }
+
             if (JOptionPane.showConfirmDialog(MainForm.this, String.format("Обработать директорию '%s'?", path)) == JOptionPane.YES_OPTION) {
-                ProcessDirectory(path);
+                new Thread(new ProcessorThread(path)).start();
             }
         }
     }
 
-    public int ProcessDirectory(String path) {
-        File root = new File(path);
-        if (!root.isDirectory()) {
-            JOptionPane.showMessageDialog(MainForm.this, "'%s' не директория!", MainForm.this.getTitle(), JOptionPane.ERROR_MESSAGE);
-            return 0;
+    private class ProcessorThread implements Runnable {
+        private String path;
+
+        public ProcessorThread(String path) {
+            this.path = path;
         }
 
-        for (File file : root.listFiles()) {
-            textArea1.append(file.getAbsolutePath() + "\n");
+        public void ProcessDirectory(String path) throws InterruptedException {
+            File root = new File(path);
+            if (path.isEmpty() || !root.isDirectory()) {
+                JOptionPane.showMessageDialog(MainForm.this, "'%s' не директория!", MainForm.this.getTitle(), JOptionPane.ERROR_MESSAGE);
+            }
+
+            synchronized (MainForm.this) {
+                progressBar1.setMinimum(0);
+                progressBar1.setMaximum(100);
+                textArea1.setText(null);
+            }
+
+            List<File> files = new ArrayList<>();
+
+            try {
+                Files.walkFileTree(root.toPath(), new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        files.add(file.toFile());
+
+                        if (Thread.currentThread().isInterrupted()) return FileVisitResult.TERMINATE;
+                        return super.visitFile(file, attrs);
+                    }
+                });
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            synchronized (MainForm.this) {
+                textArea1.append(String.format("Всего файлов: %d\n", files.size()));
+                progressBar1.setMinimum(0);
+                progressBar1.setMaximum(files.size());
+            }
+
+            for (int i = 0; i < files.size() && !Thread.currentThread().isInterrupted(); i++) {
+                textArea1.append(files.get(i).getAbsolutePath() + "\n");
+                progressBar1.setValue(i + 1);
+                Thread.sleep(10);
+            }
         }
 
-        return 0;
+        @Override
+        public void run() {
+            try {
+                browseButton.setEnabled(false);
+                startButton.setEnabled(false);
+                MainForm.this.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+                ProcessDirectory(path);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            finally {
+                browseButton.setEnabled(true);
+                startButton.setEnabled(true);
+                MainForm.this.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+            }
+        }
     }
+
 }
