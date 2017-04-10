@@ -9,8 +9,8 @@
         <module name="QSH Renamer" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="QSH Renamer" target="1.5" />
+    <bytecodeTargetLevel target="1.8">
+      <module name="QSH Renamer" target="1.8" />
     </bytecodeTargetLevel>
   </component>
 </project>
