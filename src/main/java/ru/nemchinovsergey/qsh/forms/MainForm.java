@@ -79,7 +79,6 @@ public class MainForm extends JFrame {
             this.path = path;
         }
 
-
         private ProcessResult ProcessFile(File sourceFile) {
             String name = sourceFile.getName();
             String path = sourceFile.getParent() + "/";
@@ -146,11 +145,6 @@ public class MainForm extends JFrame {
             }
 
             for (int i = 0; i < files.size() && !Thread.currentThread().isInterrupted(); i++) {
-                synchronized (MainForm.this) {
-                    textArea1.append(files.get(i).getAbsolutePath() + " ---> ");
-                    progressBar1.setValue(i + 1);
-                }
-
                 ProcessResult result = ProcessFile(files.get(i));
                 String action = null;
                 switch (result) {
@@ -172,10 +166,13 @@ public class MainForm extends JFrame {
                 }
 
                 synchronized (MainForm.this) {
-                    textArea1.append(action + "\n");
+                    if (result != ProcessResult.SKIPPED) {
+                        textArea1.append(files.get(i).getAbsolutePath() + " ---> " + action + "\n");
+                    }
+                    progressBar1.setValue(i + 1);
                 }
 
-                Thread.sleep(10);
+                //Thread.sleep(10);
             }
         }
 
