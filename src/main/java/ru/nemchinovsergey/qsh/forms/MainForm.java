@@ -14,6 +14,14 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.List;
 
+enum ProcessResult {
+    SKIPPED,
+    RENAMED,
+    DELETED,
+    WARNING,
+    ERROR
+}
+
 /**
  * Created by Sergey on 08.04.2017.
  */
@@ -71,7 +79,39 @@ public class MainForm extends JFrame {
             this.path = path;
         }
 
-        public void ProcessDirectory(String path) throws InterruptedException {
+
+        private ProcessResult ProcessFile(File sourceFile) {
+            String name = sourceFile.getName();
+            String path = sourceFile.getParent() + "/";
+
+            // check sourceFile name for "OrdLog.Eu-12.14.2014-10-22.qsh" sample
+            if (name.toLowerCase().matches("ordlog\\..+\\.qsh")) {
+
+                String targetName = name.substring(7, name.length() - 4) + ".OrdLog.qsh";
+                File targetFile = new File(path + targetName);
+
+                if (targetFile.exists()) {
+                    if (sourceFile.length() == targetFile.length()) {
+                        if (sourceFile.delete())
+                            return ProcessResult.DELETED;
+                        else
+                            return ProcessResult.ERROR;
+                    }
+                    else {
+                        return ProcessResult.WARNING;
+                    }
+                }
+                else {
+                    if (sourceFile.renameTo(targetFile))
+                        return ProcessResult.RENAMED;
+                    else
+                        return ProcessResult.ERROR;
+                }
+            }
+            return ProcessResult.SKIPPED;
+        }
+
+        private void ProcessDirectory(String path) throws InterruptedException {
             File root = new File(path);
             if (path.isEmpty() || !root.isDirectory()) {
                 JOptionPane.showMessageDialog(MainForm.this, "'%s' не директория!", MainForm.this.getTitle(), JOptionPane.ERROR_MESSAGE);
@@ -106,8 +146,35 @@ public class MainForm extends JFrame {
             }
 
             for (int i = 0; i < files.size() && !Thread.currentThread().isInterrupted(); i++) {
-                textArea1.append(files.get(i).getAbsolutePath() + "\n");
-                progressBar1.setValue(i + 1);
+                synchronized (MainForm.this) {
+                    textArea1.append(files.get(i).getAbsolutePath() + " ---> ");
+                    progressBar1.setValue(i + 1);
+                }
+
+                ProcessResult result = ProcessFile(files.get(i));
+                String action = null;
+                switch (result) {
+                    case SKIPPED:
+                        action = "Пропущен";
+                        break;
+                    case RENAMED:
+                        action = "Переименован";
+                        break;
+                    case DELETED:
+                        action = "Удалён";
+                        break;
+                    case WARNING:
+                        action = "Требует внимания";
+                        break;
+                    case ERROR:
+                        action = "Ошибка переименования/удаления";
+                        break;
+                }
+
+                synchronized (MainForm.this) {
+                    textArea1.append(action + "\n");
+                }
+
                 Thread.sleep(10);
             }
         }
@@ -121,8 +188,7 @@ public class MainForm extends JFrame {
                 ProcessDirectory(path);
             } catch (InterruptedException e) {
                 e.printStackTrace();
-            }
-            finally {
+            } finally {
                 browseButton.setEnabled(true);
                 startButton.setEnabled(true);
                 MainForm.this.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
