@@ -2,10 +2,9 @@ package ru.nemchinovsergey.qsh.forms;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.io.File;
-import java.io.IOException;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.*;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,25 +13,21 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.List;
 
-enum ProcessResult {
-    SKIPPED,
-    RENAMED,
-    DELETED,
-    WARNING,
-    ERROR
-}
 
 /**
  * Created by Sergey on 08.04.2017.
  */
 public class MainForm extends JFrame {
-    private JTextField textField1;
+    private static final String CONFIG_FILE_NAME = "app.properties";
+    private static final String DIRECTORY = "directory";
+
+    private JTextField textDirectory;
     private JButton startButton;
     private JProgressBar progressBar1;
-    private JList list1;
     private JButton browseButton;
     private JPanel rootPanel;
     private JTextArea textArea1;
+    private Properties config;
 
 
     public MainForm() throws HeadlessException {
@@ -43,23 +38,17 @@ public class MainForm extends JFrame {
         setLocationRelativeTo(null);
         setVisible(true);
 
-        startButton.addActionListener(new StartAction());
-        browseButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                JFileChooser fileChooser = new JFileChooser();
-                fileChooser.setCurrentDirectory(new File(textField1.getText()));
-                fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        config = loadConfig();
 
-                if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                    textField1.setText(fileChooser.getSelectedFile().getAbsolutePath());
-                }
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                saveConfig();
             }
         });
-    }
 
-    private class StartAction implements ActionListener {
-        public void actionPerformed(ActionEvent e) {
-            String path = textField1.getText();
+        startButton.addActionListener(action -> {
+            String path = textDirectory.getText();
 
             if (path == null || path.isEmpty()) {
                 JOptionPane.showMessageDialog(MainForm.this, "Укажите директорию!");
@@ -69,7 +58,59 @@ public class MainForm extends JFrame {
             if (JOptionPane.showConfirmDialog(MainForm.this, String.format("Обработать директорию '%s'?", path)) == JOptionPane.YES_OPTION) {
                 new Thread(new ProcessorThread(path)).start();
             }
+        });
+
+        browseButton.addActionListener(action -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setCurrentDirectory(new File(textDirectory.getText()));
+            fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+
+            if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                String dir = fileChooser.getSelectedFile().getAbsolutePath();
+                textDirectory.setText(dir);
+                config.put(DIRECTORY, dir);
+            }
+        });
+
+        textDirectory.setText(config.getProperty(DIRECTORY, "Укажите директорию!"));
+    }
+
+
+    private Properties loadConfig() {
+        Properties properties = new Properties();
+
+        try (Reader reader = new FileReader(CONFIG_FILE_NAME)) {
+            properties.load(reader);
         }
+        catch (FileNotFoundException e) {
+            //JOptionPane.showMessageDialog(MainForm.this, e.getMessage());
+        }
+        catch (Exception e) {
+            // do nothing
+        }
+        return properties;
+    }
+
+    private void saveConfig() {
+        File configFile = new File(CONFIG_FILE_NAME);
+        try (FileWriter writer = new FileWriter(configFile)) {
+            config.store(writer, "Application settings");
+        }
+        catch (FileNotFoundException e) {
+            // file does not exist
+            JOptionPane.showMessageDialog(MainForm.this, e.getMessage());
+        }
+        catch (Exception e) {
+            // do nothing
+        }
+    }
+
+    private enum ProcessResult {
+        SKIPPED,
+        RENAMED,
+        DELETED,
+        WARNING,
+        ERROR
     }
 
     private class ProcessorThread implements Runnable {
@@ -95,12 +136,10 @@ public class MainForm extends JFrame {
                             return ProcessResult.DELETED;
                         else
                             return ProcessResult.ERROR;
-                    }
-                    else {
+                    } else {
                         return ProcessResult.WARNING;
                     }
-                }
-                else {
+                } else {
                     if (sourceFile.renameTo(targetFile))
                         return ProcessResult.RENAMED;
                     else
