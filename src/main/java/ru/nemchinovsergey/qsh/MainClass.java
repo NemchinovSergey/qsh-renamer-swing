@@ -30,10 +30,6 @@ public class MainClass {
             // handle exception
         }
 
-        SwingUtilities.invokeAndWait(new Runnable() {
-            public void run() {
-                new MainForm();
-            }
-        });
+        SwingUtilities.invokeAndWait(() -> new MainForm());
     }
 }
